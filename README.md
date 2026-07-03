@@ -187,10 +187,8 @@ build.bat
 
 This builds on a lot of prior work, and wouldn't exist without it:
 
-- **anzz1** — the original PSOBB widescreen. The anchor tables this is grown from are
-  anzz1's, and the widescreen patch that historically shipped bundled inside d3d8 wrappers
-  was anzz1's work too — this mod is that widescreen pulled out into a standalone,
-  wrapper-agnostic ASI.
+- **anzz1** — the PSOBB widescreen this mod is built on. This mod is that widescreen,
+  pulled out into a standalone, wrapper-agnostic ASI.
 - **Trinity DLL** — the static widescreen patch set used to name and cross-check every
   anchor VA.
 - **llama-bob** — the clean-C reconstruction of the widescreen engine

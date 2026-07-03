@@ -31,10 +31,9 @@ The widescreen anchor tables are grown from community reverse-engineering that p
 this repo. These are credited by attribution; where no upstream license exists, none is
 claimed:
 
-- **anzz1** — the original PSOBB widescreen. The anchor tables here are grown from anzz1's
-  work, and the widescreen patch that historically shipped **bundled inside d3d8 wrappers
-  was anzz1's** — this mod is that widescreen pulled out into a standalone, wrapper-agnostic
-  ASI. Lineage notes: [`reshade/LICENSES/CREDITS-anzz1-lineage.md`](reshade/LICENSES/CREDITS-anzz1-lineage.md).
+- **anzz1** — the PSOBB widescreen this mod is built on; the anchor tables here are grown
+  from anzz1's work. This mod is that widescreen pulled out into a standalone,
+  wrapper-agnostic ASI.
 - **tofuman** — the `WideScreen.c` reference used to cross-check anchor math.
 - **Trinity DLL** — the static widescreen patch set used to name and cross-check every
   anchor VA.
