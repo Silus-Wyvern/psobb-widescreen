@@ -16,7 +16,7 @@ The mod's own source (`asi/`) is © the psobb-widescreen author. The sections be
 | [MinHook](https://github.com/TsudaKageyu/minhook) | the inline API-hook engine every detour is built on | Tsuda Kageyu | **BSD 2-Clause** | vendored — [`_shared/minhook/LICENSE.txt`](_shared/minhook/LICENSE.txt) |
 | [ReShade](https://github.com/crosire/reshade) | optional post-FX proxy (SMAA, SSAO, Cel, DOF, HDR) | crosire | **BSD 3-Clause** | [`reshade/LICENSES/BSD3-ReShade.txt`](reshade/LICENSES/BSD3-ReShade.txt) |
 | [SMAA](https://github.com/iryoku/smaa) shader | anti-aliasing in the ReShade pack | Jorge Jimenez et al. | **MIT** | [`reshade/LICENSES/MIT-SMAA.txt`](reshade/LICENSES/MIT-SMAA.txt) |
-| [crosire d3d8to9](https://github.com/crosire/d3d8to9) | recommended d3d8 wrapper (user-installed, not bundled) | crosire | **BSD 3-Clause** | see upstream repo |
+| [crosire d3d8to9](https://github.com/crosire/d3d8to9) | recommended d3d8 wrapper (bundled in the `-crosire` release) | crosire | **BSD 3-Clause** | see upstream repo |
 | [dgVoodoo2](http://dege.fw.hu/dgVoodoo2/) | recommended d3d8 wrapper (bundled in the `-dgvoodoo` release) | Dege | **Freeware** (Dege's EULA) | see [dege.fw.hu/dgVoodoo2](http://dege.fw.hu/dgVoodoo2/) |
 
 The custom ReShade effects shipped in `reshade/shaders/Shaders/` (`PSO_CelShader.fx`,
