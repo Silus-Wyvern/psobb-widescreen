@@ -202,6 +202,10 @@ This builds on a lot of prior work, and wouldn't exist without it:
   vendored under `_shared/minhook/`).
 - **ReShade** by crosire, and the SMAA and shader authors — the optional post-FX layer
   ([github.com/crosire/reshade](https://github.com/crosire/reshade)).
+- **dgVoodoo2** by Dege — the D3D wrapper bundled in the `-dgvoodoo` release
+  ([dege.fw.hu/dgVoodoo2](http://dege.fw.hu/dgVoodoo2/), freeware).
+- **crosire d3d8to9** — the d3d8 wrapper bundled in the `-crosire` release
+  ([github.com/crosire/d3d8to9](https://github.com/crosire/d3d8to9), BSD 3-Clause).
 
 Full third-party licenses, repos and RE lineage: **[LICENSES.md](LICENSES.md)**.
 
