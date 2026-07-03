@@ -10,7 +10,7 @@ plumbing (depth access, pass declarations) was adapted to ReShade FX.
 | File | Effect lineage | License / status |
 |------|----------------|------------------|
 | `shaders/Shaders/PSO_SSAO.fx` | SSAO by **Arkano22**, assembled/optimized by **Martins Upitis (martinsh)**; PSOBB .fx packaging by **anzz1** | free / public technique; attribution in header |
-| `shaders/Shaders/PSO_DOF.fx` | DoF by **WrinklyNinja** (v7), PSOBB tuning by **Sodaboy**; packaging by **anzz1** | free; attribution in header |
+| `shaders/Shaders/PSO_DOF.fx` | DoF by **WrinklyNinja** (v7); packaging by **anzz1** | free; attribution in header |
 | `shaders/Shaders/PSO_CelShader.fx` | Cel shading from **GSFx Shader Suite by Asmodean**; packaging by **anzz1** | GSFx has no formal OSS license — bundling is owner go/no-go |
 | `shaders/Shaders/PSO_HDRToneMap.fx` | HDR tonemap from **GSFx Shader Suite by Asmodean**; packaging by **anzz1** | GSFx has no formal OSS license — bundling is owner go/no-go |
 | `shaders/Shaders/DisplayDepth.fx` | depth acceptance test; reduced standalone variant of crosire's DisplayDepth | self-authored; mirrors CC0-1.0 upstream |
