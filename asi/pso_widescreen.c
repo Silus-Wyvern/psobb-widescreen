@@ -99,6 +99,12 @@ typedef struct {
     float _41, _42, _43, _44;
 } D3DMATRIX_X;
 
+// IDirect3D8::GetAdapterCount - slot 4 in the same vtable (after
+// QueryInterface/AddRef/Release at 0..2 and RegisterSoftwareDevice at 3).
+// Used only to sanity-check a configured Adapter ordinal before we hand it
+// to CreateDevice.
+typedef UINT (STDMETHODCALLTYPE *GetAdapterCount_t)(IDirect3D8 *self);
+
 typedef HRESULT (STDMETHODCALLTYPE *SetTransform_t)(
     IDirect3DDevice8 *self, DWORD State, const D3DMATRIX_X *pMatrix);
 
@@ -142,6 +148,12 @@ static struct {
     int   windowed;           // 0=fullscreen, 1=windowed, 2=borderless windowed
     int   width;              // target dimensions (window + optional backbuffer)
     int   height;
+    // Which D3D8 adapter (GPU) to create the device on. -1 = leave the
+    // engine's own choice alone (default, previous behaviour). Otherwise the
+    // ordinal is validated against GetAdapterCount() at CreateDevice time and
+    // ignored if out of range, so a stale value can never stop the game
+    // starting. INI key Adapter; widescreen.cfg Adapter is PRIMARY.
+    int   adapter;
     // Sodaboy convention — engine canvas is FIXED at logical
     // 1920x1080 regardless of physical Width/Height. The d3d8 wrapper
     // (Sodaboy or dgVoodoo) handles upscaling 1920x1080 to physical.
@@ -418,6 +430,7 @@ static void load_config(void)
     g_cfg.windowed           = 1;
     g_cfg.width              = 0;
     g_cfg.height             = 0;
+    g_cfg.adapter            = -1;     // -1 = don't touch the engine's choice
     g_cfg.logical_width      = 1920;   // Sodaboy-convention engine canvas
     g_cfg.logical_height     = 1080;
     g_cfg.override_backbuffer = 0; // stretch mode by default
@@ -542,6 +555,7 @@ static void load_config(void)
         else if (_stricmp(key, "Windowed")          == 0) { g_cfg.windowed = atoi(val); windowed_explicit = 1; }
         else if (_stricmp(key, "Width")             == 0) g_cfg.width          = atoi(val);
         else if (_stricmp(key, "Height")            == 0) g_cfg.height         = atoi(val);
+        else if (_stricmp(key, "Adapter")           == 0) g_cfg.adapter        = atoi(val);
         else if (_stricmp(key, "LogicalWidth")      == 0) {
             int v = atoi(val);
             if (v >= 320 && v <= 8192) g_cfg.logical_width = v;
@@ -681,7 +695,7 @@ static void load_config(void)
         _snprintf_s(cfgpath, MAX_PATH, _TRUNCATE, "%swidescreen.cfg", exe);
         FILE *cf = NULL; fopen_s(&cf, cfgpath, "rb");
         if (cf) {
-            int cw = 0, ch = 0, cwin = -1;
+            int cw = 0, ch = 0, cwin = -1, cadapter = -1;
             float chud = -1.0f;   // launcher's HUDScale (primary; overrides the ini fallback)
             char cline[256];
             while (fgets(cline, sizeof(cline), cf)) {
@@ -700,11 +714,21 @@ static void load_config(void)
                 else if (_stricmp(ckey, "Height")   == 0) ch   = atoi(cval);
                 else if (_stricmp(ckey, "Windowed") == 0) cwin = atoi(cval);
                 else if (_stricmp(ckey, "HUDScale") == 0) chud = (float)atof(cval);
+                else if (_stricmp(ckey, "Adapter")  == 0) cadapter = atoi(cval);
             }
             fclose(cf);
             // Resolution: launcher cfg fills it only if the INI didn't pin it.
             if ((g_cfg.width <= 0 || g_cfg.height <= 0) && cw >= 320 && ch >= 240) {
                 g_cfg.width = cw; g_cfg.height = ch;
+            }
+            // Adapter (GPU): launcher cfg is PRIMARY, same convention as
+            // HUDScale - it overrides the ini. Only the sign is checked here;
+            // the ordinal is validated against the real adapter count in
+            // Hook_CreateDevice, the only place that number is knowable.
+            if (cadapter >= 0) {
+                g_cfg.adapter = cadapter;
+                log_line("[pso_widescreen] adapter from widescreen.cfg: "
+                         "Adapter=%d (launcher PRIMARY; overrides ini)", cadapter);
             }
             // Window mode: launcher cfg is the source of truth unless the INI
             // set Windowed explicitly. Range-checked to our 0/1/2 semantics.
@@ -1431,7 +1455,35 @@ static HRESULT STDMETHODCALLTYPE Hook_CreateDevice(
                  (unsigned)pp->BackBufferWidth, (unsigned)pp->BackBufferHeight,
                  (int)pp->Windowed);
     }
-    HRESULT hr = real_CreateDevice(self, Adapter, DeviceType, hFocusWindow,
+    // Adapter (GPU) override. Default g_cfg.adapter = -1 leaves the engine's
+    // own choice untouched, so behaviour is unchanged unless a launcher or ini
+    // explicitly asks for a specific GPU.
+    //
+    // The ordinal is validated HERE rather than at parse time because the
+    // adapter count is only knowable once we have a live IDirect3D8. A stale
+    // or bogus value is ignored rather than passed through: an out-of-range
+    // ordinal makes CreateDevice fail, and PSOBB reacts to that by dying at
+    // startup with no useful message - which is exactly the failure mode this
+    // feature exists to avoid.
+    UINT use_adapter = Adapter;
+    if (g_cfg.adapter >= 0) {
+        UINT count = 0;
+        void **vt = *(void ***)self;
+        GetAdapterCount_t get_count = (GetAdapterCount_t)vt[4];
+        if (get_count) count = get_count(self);
+        if ((UINT)g_cfg.adapter < count) {
+            use_adapter = (UINT)g_cfg.adapter;
+            log_line("[pso_widescreen] CreateDevice: adapter %u -> %u "
+                     "(configured; %u adapters present)",
+                     (unsigned)Adapter, (unsigned)use_adapter, (unsigned)count);
+        } else {
+            log_line("[pso_widescreen] CreateDevice: configured adapter %d is "
+                     "out of range (%u adapters present) - keeping engine's %u",
+                     g_cfg.adapter, (unsigned)count, (unsigned)Adapter);
+        }
+    }
+
+    HRESULT hr = real_CreateDevice(self, use_adapter, DeviceType, hFocusWindow,
                                    BehaviorFlags, pp, out);
     if (SUCCEEDED(hr) && out && *out) {
         // Patch unconditionally when we successfully created a device —
