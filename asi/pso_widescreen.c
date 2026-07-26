@@ -105,6 +105,27 @@ typedef struct {
 // to CreateDevice.
 typedef UINT (STDMETHODCALLTYPE *GetAdapterCount_t)(IDirect3D8 *self);
 
+// IDirect3D8::GetAdapterIdentifier - slot 5, next to GetAdapterCount. Used
+// purely for diagnostics: naming the adapters makes it obvious whether the
+// game is talking to real hardware or to a wrapper's virtual card (dgVoodoo2
+// presents one "internal3D" adapter regardless of how many GPUs are fitted).
+#define WS_ADAPTER_ID_STRLEN 512
+typedef struct {
+    char          Driver[WS_ADAPTER_ID_STRLEN];
+    char          Description[WS_ADAPTER_ID_STRLEN];
+    LARGE_INTEGER DriverVersion;
+    DWORD         VendorId;
+    DWORD         DeviceId;
+    DWORD         SubSysId;
+    DWORD         Revision;
+    GUID          DeviceIdentifier;
+    DWORD         WHQLLevel;
+} D3DADAPTER_IDENTIFIER8_X;
+
+typedef HRESULT (STDMETHODCALLTYPE *GetAdapterIdentifier_t)(
+    IDirect3D8 *self, UINT Adapter, DWORD Flags,
+    D3DADAPTER_IDENTIFIER8_X *pIdentifier);
+
 typedef HRESULT (STDMETHODCALLTYPE *SetTransform_t)(
     IDirect3DDevice8 *self, DWORD State, const D3DMATRIX_X *pMatrix);
 
@@ -1394,6 +1415,39 @@ static void patch_device_vtable(IDirect3DDevice8 *dev)
     g_device_patched = 1;
 }
 
+// One-shot diagnostic: list every adapter d3d8 reports, with its name. Called
+// from the first CreateDevice, where a live IDirect3D8 is guaranteed.
+//
+// Fastest way to tell whether "only 1 adapter" means the machine really has one
+// usable GPU, or that a wrapper is presenting a single virtual card in front of
+// several. Costs one call per adapter, once.
+static void log_adapter_inventory(IDirect3D8 *d3d, UINT count)
+{
+    void **vt = *(void ***)d3d;
+    GetAdapterIdentifier_t get_id = (GetAdapterIdentifier_t)vt[5];
+    if (!get_id) {
+        log_line("[pso_widescreen] adapters: %u present "
+                 "(GetAdapterIdentifier unavailable)", (unsigned)count);
+        return;
+    }
+    for (UINT i = 0; i < count; ++i) {
+        D3DADAPTER_IDENTIFIER8_X id;
+        memset(&id, 0, sizeof(id));
+        if (SUCCEEDED(get_id(d3d, i, 0, &id))) {
+            id.Description[WS_ADAPTER_ID_STRLEN - 1] = 0;
+            id.Driver[WS_ADAPTER_ID_STRLEN - 1] = 0;
+            log_line("[pso_widescreen] adapter %u: '%s' (driver '%s' "
+                     "vendor=0x%04X device=0x%04X)",
+                     (unsigned)i, id.Description, id.Driver,
+                     (unsigned)id.VendorId, (unsigned)id.DeviceId);
+        } else {
+            log_line("[pso_widescreen] adapter %u: identifier query failed",
+                     (unsigned)i);
+        }
+    }
+}
+
+
 static HRESULT STDMETHODCALLTYPE Hook_CreateDevice(
     IDirect3D8 *self,
     UINT Adapter,
@@ -1454,6 +1508,19 @@ static HRESULT STDMETHODCALLTYPE Hook_CreateDevice(
                  "(Enabled=0; Sodaboy or other wrapper owns BB %ux%u, windowed=%d)",
                  (unsigned)pp->BackBufferWidth, (unsigned)pp->BackBufferHeight,
                  (int)pp->Windowed);
+    }
+    // Adapter inventory: logged once, on the first CreateDevice. Runs whether
+    // or not an Adapter is configured, because knowing WHAT d3d8 can see is the
+    // diagnostic - a single "internal3D"-style entry means a wrapper is
+    // presenting a virtual card and no ordinal will change which GPU is used.
+    {
+        static int logged_inventory = 0;
+        if (!logged_inventory) {
+            logged_inventory = 1;
+            void **ivt = *(void ***)self;
+            GetAdapterCount_t icount = (GetAdapterCount_t)ivt[4];
+            log_adapter_inventory(self, icount ? icount(self) : 0);
+        }
     }
     // Adapter (GPU) override. Default g_cfg.adapter = -1 leaves the engine's
     // own choice untouched, so behaviour is unchanged unless a launcher or ini
