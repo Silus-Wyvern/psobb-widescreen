@@ -99,6 +99,27 @@ typedef struct {
     float _41, _42, _43, _44;
 } D3DMATRIX_X;
 
+// IDirect3D8 adapter-query slots, used only for the startup diagnostic below.
+// Slot 4 = GetAdapterCount, slot 5 = GetAdapterIdentifier (after
+// QueryInterface/AddRef/Release at 0..2 and RegisterSoftwareDevice at 3).
+#define WS_ADAPTER_ID_STRLEN 512
+typedef struct {
+    char          Driver[WS_ADAPTER_ID_STRLEN];
+    char          Description[WS_ADAPTER_ID_STRLEN];
+    LARGE_INTEGER DriverVersion;
+    DWORD         VendorId;
+    DWORD         DeviceId;
+    DWORD         SubSysId;
+    DWORD         Revision;
+    GUID          DeviceIdentifier;
+    DWORD         WHQLLevel;
+} D3DADAPTER_IDENTIFIER8_X;
+
+typedef UINT (STDMETHODCALLTYPE *GetAdapterCount_t)(IDirect3D8 *self);
+typedef HRESULT (STDMETHODCALLTYPE *GetAdapterIdentifier_t)(
+    IDirect3D8 *self, UINT Adapter, DWORD Flags,
+    D3DADAPTER_IDENTIFIER8_X *pIdentifier);
+
 typedef HRESULT (STDMETHODCALLTYPE *SetTransform_t)(
     IDirect3DDevice8 *self, DWORD State, const D3DMATRIX_X *pMatrix);
 
@@ -1370,6 +1391,34 @@ static void patch_device_vtable(IDirect3DDevice8 *dev)
     g_device_patched = 1;
 }
 
+// One-shot diagnostic: list every adapter d3d8 reports, with its name.
+static void log_adapter_inventory(IDirect3D8 *d3d, UINT count)
+{
+    void **vt = *(void ***)d3d;
+    GetAdapterIdentifier_t get_id = (GetAdapterIdentifier_t)vt[5];
+    if (!get_id) {
+        log_line("[pso_widescreen] adapters: %u present "
+                 "(GetAdapterIdentifier unavailable)", (unsigned)count);
+        return;
+    }
+    for (UINT i = 0; i < count; ++i) {
+        D3DADAPTER_IDENTIFIER8_X id;
+        memset(&id, 0, sizeof(id));
+        if (SUCCEEDED(get_id(d3d, i, 0, &id))) {
+            id.Description[WS_ADAPTER_ID_STRLEN - 1] = 0;
+            id.Driver[WS_ADAPTER_ID_STRLEN - 1] = 0;
+            log_line("[pso_widescreen] adapter %u: '%s' (driver '%s' "
+                     "vendor=0x%04X device=0x%04X)",
+                     (unsigned)i, id.Description, id.Driver,
+                     (unsigned)id.VendorId, (unsigned)id.DeviceId);
+        } else {
+            log_line("[pso_widescreen] adapter %u: identifier query failed",
+                     (unsigned)i);
+        }
+    }
+}
+
+
 static HRESULT STDMETHODCALLTYPE Hook_CreateDevice(
     IDirect3D8 *self,
     UINT Adapter,
@@ -1430,6 +1479,20 @@ static HRESULT STDMETHODCALLTYPE Hook_CreateDevice(
                  "(Enabled=0; Sodaboy or other wrapper owns BB %ux%u, windowed=%d)",
                  (unsigned)pp->BackBufferWidth, (unsigned)pp->BackBufferHeight,
                  (int)pp->Windowed);
+    }
+    // Adapter inventory: logged once, on the first CreateDevice, where a live
+    // IDirect3D8 is guaranteed. A count alone cannot tell a genuine
+    // multi-adapter machine from a wrapper presenting a single virtual card in
+    // front of several - dgVoodoo2, for instance, reports one adapter no matter
+    // how many GPUs are fitted. Naming them makes that obvious in the log.
+    {
+        static int logged_inventory = 0;
+        if (!logged_inventory) {
+            logged_inventory = 1;
+            void **ivt = *(void ***)self;
+            GetAdapterCount_t icount = (GetAdapterCount_t)ivt[4];
+            log_adapter_inventory(self, icount ? icount(self) : 0);
+        }
     }
     HRESULT hr = real_CreateDevice(self, Adapter, DeviceType, hFocusWindow,
                                    BehaviorFlags, pp, out);
