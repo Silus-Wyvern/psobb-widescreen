@@ -1492,6 +1492,13 @@ static HRESULT STDMETHODCALLTYPE Hook_CreateDevice(
             void **ivt = *(void ***)self;
             GetAdapterCount_t icount = (GetAdapterCount_t)ivt[4];
             log_adapter_inventory(self, icount ? icount(self) : 0);
+            // Also record WHICH adapter the engine asked for. Without it there is
+            // no way to tell from a log which GPU was used when more than one is
+            // present - PSOBB simply takes 0, which may be the weaker card. With
+            // the inventory above, one launch tells you both what was available
+            // and what was chosen.
+            log_line("[pso_widescreen] CreateDevice: engine requested adapter %u",
+                     (unsigned)Adapter);
         }
     }
     HRESULT hr = real_CreateDevice(self, Adapter, DeviceType, hFocusWindow,
