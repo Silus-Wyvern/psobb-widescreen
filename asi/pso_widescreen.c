@@ -433,6 +433,36 @@ void log_line(const char *fmt, ...)
     LeaveCriticalSection(&g_log_cs);
 }
 
+// Real desktop mode in PHYSICAL pixels.
+//
+// WHY NOT GetSystemMetrics: psobb.exe has no dpiAware manifest element, so on a
+// machine with Windows display scaling above 100% SM_CXSCREEN/SM_CYSCREEN return
+// the VIRTUALISED desktop size, not the panel's. Under Windowed=2 that figure
+// becomes render_w/render_h, is baked into psobb.exe's own resolution table at
+// 0x009006F4, and is forced onto the backbuffer -- so the engine asks Direct3D
+// for a mode that does not exist and dies before CreateDevice.
+//
+// EnumDisplaySettings reports the display mode itself and is unaffected by the
+// calling process's DPI awareness. GetSystemMetrics stays as the fallback so a
+// failed query degrades to the previous behaviour rather than to zero.
+//
+// NULL device == the primary display, matching the SM_CXSCREEN semantics this
+// replaces: which monitor is consulted does not change.
+static void desktop_mode_px(int *out_w, int *out_h)
+{
+    DEVMODEA dm;
+    memset(&dm, 0, sizeof(dm));
+    dm.dmSize = sizeof(dm);
+    if (EnumDisplaySettingsA(NULL, ENUM_CURRENT_SETTINGS, &dm)
+        && dm.dmPelsWidth >= 320 && dm.dmPelsHeight >= 240) {
+        *out_w = (int)dm.dmPelsWidth;
+        *out_h = (int)dm.dmPelsHeight;
+        return;
+    }
+    *out_w = GetSystemMetrics(SM_CXSCREEN);
+    *out_h = GetSystemMetrics(SM_CYSCREEN);
+}
+
 static void load_config(void)
 {
     g_cfg.enabled            = 0;
@@ -758,18 +788,20 @@ static void load_config(void)
     // render res, the 2D affine (render_w/design_w) and the engine resolution
     // table all derive from this, so the whole layout follows automatically.
     if (g_cfg.windowed == 2) {
-        int sw = GetSystemMetrics(SM_CXSCREEN);
-        int sh = GetSystemMetrics(SM_CYSCREEN);
+        int sw = 0, sh = 0;
+        desktop_mode_px(&sw, &sh);
         if (sw >= 320 && sh >= 240) {
             g_cfg.width  = sw;  g_cfg.height = sh;
             g_cfg.logical_width = sw;  g_cfg.logical_height = sh;
             g_cfg.override_backbuffer = 1;   // CreateDevice forces BB = desktop res
         }
+        log_line("[pso_widescreen] desktop mode %dx%d (GetSystemMetrics says %dx%d)",
+                 sw, sh, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
     }
     // Fallback for other window modes / unset: default to the primary monitor.
     if (g_cfg.width <= 0 || g_cfg.height <= 0) {
-        int sw = GetSystemMetrics(SM_CXSCREEN);
-        int sh = GetSystemMetrics(SM_CYSCREEN);
+        int sw = 0, sh = 0;
+        desktop_mode_px(&sw, &sh);
         if (sw >= 320 && sh >= 240) { g_cfg.width = sw; g_cfg.height = sh; }
     }
     // Auto-derive game aspect from Width/Height. Without this, the default
